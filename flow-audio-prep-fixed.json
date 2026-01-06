@@ -104,13 +104,16 @@
       "sourceRepo": "Local",
       "pluginName": "createStereoDownmix",
       "version": "1.0.0",
-      "id": "stereo1",
       "inputsDB": {
         "bitrate": "256",
-        "trackTitle": "Stereo / Night",
-        "normalize": true
+        "trackTitle": "Stereo (Night Mode)",
+        "normalize": true,
+        "loudnormTarget": "-16",
+        "encoder": "aac",
+        "timeout": "60"
       },
       "fpEnabled": true,
+      "id": "stereo1",
       "position": {
         "x": 200,
         "y": 780
@@ -136,28 +139,19 @@
       "sourceRepo": "Local",
       "pluginName": "createStereoDownmix",
       "version": "1.0.0",
-      "id": "stereo2",
       "inputsDB": {
         "bitrate": "256",
-        "trackTitle": "Stereo / Night",
-        "normalize": true
+        "trackTitle": "Stereo (Night Mode)",
+        "normalize": true,
+        "loudnormTarget": "-16",
+        "encoder": "aac",
+        "timeout": "60"
       },
       "fpEnabled": true,
+      "id": "stereo2",
       "position": {
         "x": 500,
         "y": 420
-      }
-    },
-    {
-      "name": "Done",
-      "sourceRepo": "Community",
-      "pluginName": "replaceOriginalFile",
-      "version": "1.0.0",
-      "fpEnabled": true,
-      "id": "done",
-      "position": {
-        "x": 450,
-        "y": 900
       }
     }
   ],
@@ -211,40 +205,10 @@
       "id": "e8"
     },
     {
-      "source": "stereo1",
-      "sourceHandle": "1",
-      "target": "done",
-      "id": "e9"
-    },
-    {
-      "source": "stereo1",
-      "sourceHandle": "2",
-      "target": "done",
-      "id": "e10"
-    },
-    {
       "source": "chkMulti",
       "sourceHandle": "1",
       "target": "stereo2",
       "id": "e11"
-    },
-    {
-      "source": "chkMulti",
-      "sourceHandle": "2",
-      "target": "done",
-      "id": "e12"
-    },
-    {
-      "source": "stereo2",
-      "sourceHandle": "1",
-      "target": "done",
-      "id": "e13"
-    },
-    {
-      "source": "stereo2",
-      "sourceHandle": "2",
-      "target": "done",
-      "id": "e14"
     }
   ]
 }

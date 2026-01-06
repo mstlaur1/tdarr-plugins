@@ -165,6 +165,21 @@
         "x": 700,
         "y": 420
       }
+    },
+    {
+      "name": "Normalize Audio Titles",
+      "sourceRepo": "Local",
+      "pluginName": "normalizeAudioTitles",
+      "version": "1.0.0",
+      "inputsDB": {
+        "defaultLanguage": "eng"
+      },
+      "fpEnabled": true,
+      "id": "normTitles",
+      "position": {
+        "x": 450,
+        "y": 900
+      }
     }
   ],
   "flowEdges": [
@@ -227,6 +242,24 @@
       "sourceHandle": "2",
       "target": "skipStereo",
       "id": "e12"
+    },
+    {
+      "source": "stereo1",
+      "sourceHandle": "1",
+      "target": "normTitles",
+      "id": "e13"
+    },
+    {
+      "source": "stereo2",
+      "sourceHandle": "1",
+      "target": "normTitles",
+      "id": "e14"
+    },
+    {
+      "source": "skipStereo",
+      "sourceHandle": "1",
+      "target": "normTitles",
+      "id": "e15"
     }
   ]
 }

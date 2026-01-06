@@ -1,0 +1,250 @@
+{
+  "_id": "TbBMWouem",
+  "name": "Audio Prep (DD+ & Stereo)",
+  "description": "Audio Prep (DD+ & Stereo)",
+  "tags": "",
+  "flowPlugins": [
+    {
+      "name": "Input File",
+      "sourceRepo": "Community",
+      "pluginName": "inputFile",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "input1",
+      "position": {
+        "x": 450,
+        "y": 50
+      }
+    },
+    {
+      "name": "Has DTS?",
+      "sourceRepo": "Community",
+      "pluginName": "checkAudioCodec",
+      "version": "1.0.0",
+      "inputsDB": {
+        "codec": "dts",
+        "checkBitrate": false
+      },
+      "fpEnabled": true,
+      "id": "chkDTS",
+      "position": {
+        "x": 450,
+        "y": 150
+      }
+    },
+    {
+      "name": "Begin Command",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandStart",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "ffStart",
+      "position": {
+        "x": 200,
+        "y": 280
+      }
+    },
+    {
+      "name": "Add DD+ Track",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandCustomArguments",
+      "version": "1.0.0",
+      "inputsDB": {
+        "inputArguments": "",
+        "outputArguments": "-map -0 -map 0:v -map 0:a:0 -map 0:a:0 -map 0:s? -map 0:t? -c:v copy -c:a:0 copy -c:a:1 eac3 -b:a:1 640k -c:s copy -c:t copy -disposition:a:0 0 -disposition:a:1 default -metadata:s:a:0 title=\"Original\" -metadata:s:a:1 title=\"DD+5.1\""
+      },
+      "fpEnabled": true,
+      "id": "ffArgsDDP",
+      "position": {
+        "x": 200,
+        "y": 380
+      }
+    },
+    {
+      "name": "Set Container",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandSetContainer",
+      "version": "1.0.0",
+      "inputsDB": {
+        "container": "mkv"
+      },
+      "fpEnabled": true,
+      "id": "ffCont",
+      "position": {
+        "x": 200,
+        "y": 480
+      }
+    },
+    {
+      "name": "Execute",
+      "sourceRepo": "Community",
+      "pluginName": "ffmpegCommandExecute",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "ffExec",
+      "position": {
+        "x": 200,
+        "y": 580
+      }
+    },
+    {
+      "name": "Replace Original",
+      "sourceRepo": "Community",
+      "pluginName": "replaceOriginalFile",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "replace1",
+      "position": {
+        "x": 200,
+        "y": 680
+      }
+    },
+    {
+      "name": "Add Stereo (DTS path)",
+      "sourceRepo": "Local",
+      "pluginName": "createStereoDownmix",
+      "version": "1.0.0",
+      "id": "stereo1",
+      "inputsDB": {
+        "bitrate": "256",
+        "trackTitle": "Stereo / Night",
+        "normalize": true
+      },
+      "fpEnabled": true,
+      "position": {
+        "x": 200,
+        "y": 780
+      }
+    },
+    {
+      "name": "Main Audio Multichannel?",
+      "sourceRepo": "Local",
+      "pluginName": "checkFirstAudioChannels",
+      "version": "1.0.0",
+      "inputsDB": {
+        "condition": "multichannel"
+      },
+      "fpEnabled": true,
+      "id": "chkMulti",
+      "position": {
+        "x": 600,
+        "y": 280
+      }
+    },
+    {
+      "name": "Add Stereo (non-DTS path)",
+      "sourceRepo": "Local",
+      "pluginName": "createStereoDownmix",
+      "version": "1.0.0",
+      "id": "stereo2",
+      "inputsDB": {
+        "bitrate": "256",
+        "trackTitle": "Stereo / Night",
+        "normalize": true
+      },
+      "fpEnabled": true,
+      "position": {
+        "x": 500,
+        "y": 420
+      }
+    },
+    {
+      "name": "Done",
+      "sourceRepo": "Community",
+      "pluginName": "replaceOriginalFile",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "done",
+      "position": {
+        "x": 450,
+        "y": 900
+      }
+    }
+  ],
+  "flowEdges": [
+    {
+      "source": "input1",
+      "sourceHandle": "1",
+      "target": "chkDTS",
+      "id": "e1"
+    },
+    {
+      "source": "chkDTS",
+      "sourceHandle": "1",
+      "target": "ffStart",
+      "id": "e2"
+    },
+    {
+      "source": "chkDTS",
+      "sourceHandle": "2",
+      "target": "chkMulti",
+      "id": "e3"
+    },
+    {
+      "source": "ffStart",
+      "sourceHandle": "1",
+      "target": "ffArgsDDP",
+      "id": "e4"
+    },
+    {
+      "source": "ffArgsDDP",
+      "sourceHandle": "1",
+      "target": "ffCont",
+      "id": "e5"
+    },
+    {
+      "source": "ffCont",
+      "sourceHandle": "1",
+      "target": "ffExec",
+      "id": "e6"
+    },
+    {
+      "source": "ffExec",
+      "sourceHandle": "1",
+      "target": "replace1",
+      "id": "e7"
+    },
+    {
+      "source": "replace1",
+      "sourceHandle": "1",
+      "target": "stereo1",
+      "id": "e8"
+    },
+    {
+      "source": "stereo1",
+      "sourceHandle": "1",
+      "target": "done",
+      "id": "e9"
+    },
+    {
+      "source": "stereo1",
+      "sourceHandle": "2",
+      "target": "done",
+      "id": "e10"
+    },
+    {
+      "source": "chkMulti",
+      "sourceHandle": "1",
+      "target": "stereo2",
+      "id": "e11"
+    },
+    {
+      "source": "chkMulti",
+      "sourceHandle": "2",
+      "target": "done",
+      "id": "e12"
+    },
+    {
+      "source": "stereo2",
+      "sourceHandle": "1",
+      "target": "done",
+      "id": "e13"
+    },
+    {
+      "source": "stereo2",
+      "sourceHandle": "2",
+      "target": "done",
+      "id": "e14"
+    }
+  ]
+}

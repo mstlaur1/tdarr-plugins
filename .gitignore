@@ -1,0 +1,25 @@
+# TDarr runtime data
+configs/
+logs/
+transcode_cache/
+
+# Server data except plugins
+server/*
+!server/Tdarr/
+server/Tdarr/*
+!server/Tdarr/Plugins/
+server/Tdarr/Plugins/*
+!server/Tdarr/Plugins/FlowPlugins/
+server/Tdarr/Plugins/FlowPlugins/*
+!server/Tdarr/Plugins/FlowPlugins/LocalFlowPlugins/
+
+# Temp files
+*.tmp
+*.bak
+*.backup_*
+*.staging_*
+*.lock
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -153,6 +153,18 @@
         "x": 500,
         "y": 420
       }
+    },
+    {
+      "name": "Already Stereo - Skip",
+      "sourceRepo": "Community",
+      "pluginName": "setNotToRemux",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "skipStereo",
+      "position": {
+        "x": 700,
+        "y": 420
+      }
     }
   ],
   "flowEdges": [
@@ -209,6 +221,12 @@
       "sourceHandle": "1",
       "target": "stereo2",
       "id": "e11"
+    },
+    {
+      "source": "chkMulti",
+      "sourceHandle": "2",
+      "target": "skipStereo",
+      "id": "e12"
     }
   ]
 }

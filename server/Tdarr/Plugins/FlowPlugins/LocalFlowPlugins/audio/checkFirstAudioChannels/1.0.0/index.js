@@ -113,20 +113,21 @@ var plugin = function (args) {
     // We want the FIRST audio stream that has default disposition,
     // not just any stream with default disposition
     var mainAudio = null;
-    var mainAudioStreamIndex = -1;
+    var mainAudioGlobalIndex = -1;  // Index in streams array (0:X)
+    var mainAudioRelativeIndex = -1; // Index among audio streams (0:a:X)
     var firstAudio = null;
-    var firstAudioStreamIndex = -1;
+    var firstAudioGlobalIndex = -1;
+    var firstAudioRelativeIndex = -1;
     var audioCount = 0;
 
     for (var i = 0; i < streams.length; i++) {
         var stream = streams[i];
         if (stream.codec_type === 'audio') {
-            audioCount++;
-
             // Track first audio stream as fallback
             if (firstAudio === null) {
                 firstAudio = stream;
-                firstAudioStreamIndex = i;
+                firstAudioGlobalIndex = i;
+                firstAudioRelativeIndex = audioCount;
             }
 
             // Check for default disposition (can be 1, true, or "1")
@@ -138,15 +139,19 @@ var plugin = function (args) {
             // Take the first stream with default disposition
             if (isDefault && mainAudio === null) {
                 mainAudio = stream;
-                mainAudioStreamIndex = i;
+                mainAudioGlobalIndex = i;
+                mainAudioRelativeIndex = audioCount;
                 // Don't break - continue to count total audio streams
             }
+
+            audioCount++;
         }
     }
 
     // Use default audio if found, otherwise first audio
     var targetAudio = mainAudio || firstAudio;
-    var targetStreamIndex = mainAudio ? mainAudioStreamIndex : firstAudioStreamIndex;
+    var targetGlobalIndex = mainAudio ? mainAudioGlobalIndex : firstAudioGlobalIndex;
+    var targetRelativeIndex = mainAudio ? mainAudioRelativeIndex : firstAudioRelativeIndex;
     var selectionMethod = mainAudio ? 'default disposition' : 'first audio stream';
 
     if (!targetAudio) {
@@ -164,7 +169,7 @@ var plugin = function (args) {
     if (typeof channels !== 'number' || !isFinite(channels) || channels < 0) {
         args.jobLog('ERROR: Invalid channel count in audio stream: ' + JSON.stringify(channels));
         args.jobLog('Stream info: codec=' + (targetAudio.codec_name || 'unknown') +
-            ', index=' + targetStreamIndex);
+            ', global index=0:' + targetGlobalIndex + ', audio index=0:a:' + targetRelativeIndex);
         return {
             outputFileObj: args.inputFileObj,
             outputNumber: 2,
@@ -180,7 +185,7 @@ var plugin = function (args) {
 
     args.jobLog('Audio streams found: ' + audioCount);
     args.jobLog('Main audio selected via: ' + selectionMethod);
-    args.jobLog('Stream #' + targetStreamIndex + ': ' + codecName +
+    args.jobLog('Stream 0:' + targetGlobalIndex + ' (0:a:' + targetRelativeIndex + '): ' + codecName +
         ' ' + channels + 'ch (' + channelLayout + ')' +
         ' [' + language + ']' +
         (title ? ' "' + title + '"' : ''));

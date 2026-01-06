@@ -197,13 +197,10 @@ function cleanupOrphanedFiles(fs, dir, prefix, maxAgeMs) {
 }
 
 // Acquire a lock file, returns true if acquired
-function acquireLock(fs, lockFile, timeoutMs) {
+function acquireLock(fs, lockFile, timeoutMs, spawnSync) {
     var start = Date.now();
-    var attempts = 0;
-    var maxAttempts = Math.ceil(timeoutMs / 500); // Check every ~500ms equivalent
 
-    while (attempts < maxAttempts) {
-        attempts++;
+    while (Date.now() - start < timeoutMs) {
         try {
             // O_CREAT | O_EXCL - atomic create, fails if exists
             fs.writeFileSync(lockFile, String(process.pid) + '\n' + Date.now(), { flag: 'wx' });
@@ -225,13 +222,8 @@ function acquireLock(fs, lockFile, timeoutMs) {
                     // Lock file disappeared, retry immediately
                     continue;
                 }
-                // Lock is held by another process, wait before retry
-                // Busy-wait for ~500ms (checking time in a loop)
-                var waitUntil = Date.now() + 500;
-                while (Date.now() < waitUntil) {
-                    // Busy wait - not ideal but works everywhere
-                    Math.random(); // Prevent optimizer from removing loop
-                }
+                // Lock is held by another process, sleep before retry (not busy-wait)
+                spawnSync('sleep', ['0.5'], { timeout: 2000 });
             } else {
                 // Permission error or other issue
                 return false;
@@ -311,7 +303,9 @@ var plugin = function (args) {
     }
 
     var tempFile = path.join(workDir, 'stereo_' + uniqueId + '.mkv');
-    var lockFile = inputFile + '.stereodownmix.lock';
+    // Lock file in workDir to avoid issues with read-only media directories
+    var inputBasename = path.basename(inputFile);
+    var lockFile = path.join(workDir, inputBasename + '.stereodownmix.lock');
     var backupFile = inputFile + '.backup_' + uniqueId;
 
     // Track files we need to clean up
@@ -334,7 +328,7 @@ var plugin = function (args) {
 
     // Acquire lock to prevent concurrent processing
     args.jobLog('Acquiring lock for: ' + path.basename(inputFile));
-    if (!acquireLock(fs, lockFile, 30000)) {
+    if (!acquireLock(fs, lockFile, 30000, spawn)) {
         args.jobLog('ERROR: Could not acquire lock - file may be processed by another worker');
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
@@ -487,8 +481,24 @@ var plugin = function (args) {
         return cleanup(2);
     }
 
-    // Adaptive minimum: at least 10MB or 10% of input
-    var minOutputSize = Math.max(10 * 1024 * 1024, inputStats.size * 0.1);
+    // Adaptive minimum size validation
+    // Use duration-based estimate if available, otherwise percentage-based
+    var minOutputSize;
+    var duration = 0;
+    if (args.inputFileObj.ffProbeData && args.inputFileObj.ffProbeData.format) {
+        duration = parseFloat(args.inputFileObj.ffProbeData.format.duration) || 0;
+    }
+
+    if (duration > 0) {
+        // Estimate: duration (sec) * bitrate (kbps) / 8 * 1024 = bytes
+        // Use 50% of expected size as minimum to account for VBR/silence
+        var expectedBytes = (duration * bitrate * 1024) / 8;
+        minOutputSize = Math.max(1 * 1024 * 1024, expectedBytes * 0.5); // At least 1MB
+    } else {
+        // Fallback: at least 1MB or 5% of input (lowered from 10MB/10%)
+        minOutputSize = Math.max(1 * 1024 * 1024, inputStats.size * 0.05);
+    }
+
     if (outputStats.size < minOutputSize) {
         args.jobLog('ERROR: Output too small (' +
             Math.round(outputStats.size / 1024 / 1024) + 'MB vs min ' +

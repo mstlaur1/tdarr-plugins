@@ -510,13 +510,33 @@ var plugin = function (args) {
         ' MB (input: ' + Math.round(inputStats.size / 1024 / 1024) + ' MB)');
 
     // Verify the new stereo track exists via ffprobe
+    // TDarr uses specific paths - try multiple options
     var ffprobeCli;
-    if (args.deps && args.deps.ffprobePath) {
-        ffprobeCli = args.deps.ffprobePath;
-    } else if (ffmpegCli.indexOf('ffmpeg') !== -1) {
-        ffprobeCli = ffmpegCli.replace('ffmpeg', 'ffprobe');
-    } else {
-        ffprobeCli = 'tdarr-ffprobe';
+    var ffprobePaths = [
+        args.deps && args.deps.ffprobePath,
+        '/app/Tdarr_Node/assets/app/ffmpeg/linux_x64/ffprobe',  // TDarr's bundled ffprobe
+        '/usr/lib/jellyfin-ffmpeg/ffprobe',  // Jellyfin's ffprobe
+        'ffprobe'  // System ffprobe
+    ];
+
+    // Find first existing ffprobe
+    for (var p = 0; p < ffprobePaths.length; p++) {
+        if (ffprobePaths[p]) {
+            try {
+                var testResult = spawn(ffprobePaths[p], ['-version'], { encoding: 'utf8', timeout: 5000 });
+                if (testResult.status === 0) {
+                    ffprobeCli = ffprobePaths[p];
+                    break;
+                }
+            } catch (e) {
+                // Try next path
+            }
+        }
+    }
+
+    if (!ffprobeCli) {
+        args.jobLog('ERROR: Could not find working ffprobe');
+        return cleanup(2);
     }
 
     var verifyArgs = ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-select_streams', 'a', tempFile];

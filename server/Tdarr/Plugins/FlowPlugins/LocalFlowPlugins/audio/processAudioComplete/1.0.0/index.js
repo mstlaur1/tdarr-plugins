@@ -179,15 +179,31 @@ function getPanFilter(channels) {
     return 'aformat=channel_layouts=stereo';
 }
 
-// Normalize language code for comparison
+// Normalize language code for comparison (handles both 2-letter ISO 639-1 and 3-letter codes)
 function normalizeLangCode(code) {
     if (!code) return 'und';
     var c = code.toLowerCase();
-    if (c === 'fra') return 'fre';
-    if (c === 'deu') return 'ger';
-    if (c === 'zho') return 'chi';
-    if (c === 'nld') return 'dut';
+
+    // 2-letter ISO 639-1 → 3-letter bibliographic
+    var map2 = {
+        en: 'eng', fr: 'fre', es: 'spa', de: 'ger', it: 'ita',
+        pt: 'por', nl: 'dut', sv: 'swe', no: 'nor', da: 'dan',
+        fi: 'fin', pl: 'pol', cs: 'cze', ja: 'jpn', ko: 'kor',
+        zh: 'chi', ar: 'ara', ru: 'rus', uk: 'ukr'
+    };
+    if (c.length === 2 && map2[c]) return map2[c];
+
+    // 3-letter terminology → bibliographic (where they differ)
+    var map3 = { fra: 'fre', deu: 'ger', nld: 'dut', zho: 'chi', ces: 'cze', ron: 'rum' };
+    if (map3[c]) return map3[c];
+
     return c;
+}
+
+// Parse audio index from source string like "0:a:2"
+function parseAudioIndexFromSource(source) {
+    var m = /0:a:(\d+)/.exec(source || '');
+    return m ? parseInt(m[1], 10) : -1;
 }
 
 var plugin = async function (args) {
@@ -225,11 +241,12 @@ var plugin = async function (args) {
 
     // Analyze audio streams
     var audioStreams = [];
-    var hasDTS = false;
     var hasMultichannel = false;
     var hasEnglishStereo = false;
+    var mainAudioIndex = 0;      // index into audioStreams array
     var mainAudioChannels = 0;
     var mainAudioLang = defaultLanguage;
+    var mainAudioCodec = '';
 
     for (var i = 0; i < streams.length; i++) {
         var s = streams[i];
@@ -237,10 +254,11 @@ var plugin = async function (args) {
             var lang = (s.tags && s.tags.language) || '';
             var normLang = normalizeLangCode(lang);
             var codecLower = (s.codec_name || '').toLowerCase();
+            var currentAudioIdx = audioStreams.length;
 
             audioStreams.push({
                 index: s.index,
-                audioIndex: audioStreams.length,
+                audioIndex: currentAudioIdx,
                 codec: s.codec_name,
                 codecLower: codecLower,
                 channels: s.channels,
@@ -251,22 +269,20 @@ var plugin = async function (args) {
                 isDefault: s.disposition && s.disposition.default === 1,
             });
 
-            if (codecLower === 'dts' || codecLower === 'dca') {
-                hasDTS = true;
-            }
-
             if (s.channels > 2) {
                 hasMultichannel = true;
             }
 
-            // Track main audio (first or default)
-            if (audioStreams.length === 1 || (s.disposition && s.disposition.default === 1)) {
-                mainAudioChannels = s.channels;
+            // Track main audio (first audio, or one with default disposition)
+            if (currentAudioIdx === 0 || (s.disposition && s.disposition.default === 1)) {
+                mainAudioIndex = currentAudioIdx;
+                mainAudioChannels = s.channels || 2;
                 mainAudioLang = normLang || defaultLanguage;
+                mainAudioCodec = codecLower;
             }
 
             // Check for existing English stereo
-            if (s.channels === 2 && (normLang === 'eng' || normLang === 'en' || !lang || lang === 'und')) {
+            if (s.channels === 2 && (normLang === 'eng' || !lang || lang === 'und')) {
                 hasEnglishStereo = true;
             }
         }
@@ -277,22 +293,24 @@ var plugin = async function (args) {
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
 
-    // Determine what needs to be done
-    var needsDDP = createDDP && hasDTS;
-    var needsStereo = createStereo && hasMultichannel && !hasEnglishStereo;
+    // Determine what needs to be done based on MAIN audio track (not any random track)
+    var mainIsDTS = (mainAudioCodec === 'dts' || mainAudioCodec === 'dca');
+    var needsDDP = createDDP && mainIsDTS;
+    var needsStereo = createStereo && (mainAudioChannels > 2) && !hasEnglishStereo;
 
-    args.jobLog('Analysis: ' + audioStreams.length + ' audio streams');
-    args.jobLog('  Has DTS: ' + hasDTS + ' → Create DD+: ' + needsDDP);
-    args.jobLog('  Has Multichannel: ' + hasMultichannel + ', Has Stereo: ' + hasEnglishStereo + ' → Create Stereo: ' + needsStereo);
+    args.jobLog('Analysis: ' + audioStreams.length + ' audio streams, main is index ' + mainAudioIndex);
+    args.jobLog('  Main codec: ' + mainAudioCodec + ', channels: ' + mainAudioChannels);
+    args.jobLog('  Main is DTS: ' + mainIsDTS + ' → Create DD+: ' + needsDDP);
+    args.jobLog('  Has Stereo: ' + hasEnglishStereo + ' → Create Stereo: ' + needsStereo);
 
     // Build output audio track list
     // Structure: [{source, codec, bitrate, filter, title, language, isNew}]
     var outputAudio = [];
 
-    // If creating DD+, add it first
+    // If creating DD+, add it first (from the main audio track)
     if (needsDDP) {
         outputAudio.push({
-            source: '0:a:0',
+            source: '0:a:' + mainAudioIndex,
             filterLabel: null,
             codec: 'eac3',
             bitrate: 640,
@@ -371,8 +389,12 @@ var plugin = async function (args) {
         var lang = normalizeLangCode(track.language) || defaultLanguage;
         var langName = getLanguageName(track.language, defaultLanguage);
 
+        // Only original (non-new) tracks can be labeled "Original"
+        // Only mark language as seen when we encounter a non-new track
         var isOriginal = !seenLanguages[lang] && !track.isNew;
-        seenLanguages[lang] = true;
+        if (!track.isNew) {
+            seenLanguages[lang] = true;
+        }
 
         var codecDisplay;
         if (track.isDDP) {
@@ -403,15 +425,18 @@ var plugin = async function (args) {
         var needsReorder = false;
         var needsTitleFix = false;
 
+        // Compare titles by looking up the correct source stream (after sorting)
         for (var m = 0; m < originalTracks.length; m++) {
             var ot = originalTracks[m];
-            var origStream = audioStreams[m];
-            if (origStream && origStream.title !== ot.title) {
+            var srcIdx = parseAudioIndexFromSource(ot.source);
+            var origStream = (srcIdx >= 0) ? audioStreams[srcIdx] : null;
+            if (origStream && (origStream.title || '') !== (ot.title || '')) {
                 needsTitleFix = true;
+                break;
             }
         }
 
-        // Simple reorder check - compare source indices
+        // Check if tracks are already in desired order
         for (var n = 0; n < originalTracks.length; n++) {
             var expectedSource = '0:a:' + n;
             if (originalTracks[n].source !== expectedSource) {
@@ -438,7 +463,7 @@ var plugin = async function (args) {
     // Map video and other streams
     mapArgs.push('-map', '0:v?');
 
-    // Build filter_complex for stereo if needed
+    // Build filter_complex for stereo if needed (from main audio track)
     if (needsStereo) {
         var panFilter = getPanFilter(mainAudioChannels);
         var stereoFilters = panFilter;
@@ -447,7 +472,7 @@ var plugin = async function (args) {
         }
         stereoFilters += ',alimiter=limit=0.95';
 
-        filterComplex = '[0:a:0]' + stereoFilters + '[' + stereoFilterLabel + ']';
+        filterComplex = '[0:a:' + mainAudioIndex + ']' + stereoFilters + '[' + stereoFilterLabel + ']';
     }
 
     // Map audio in the correct order

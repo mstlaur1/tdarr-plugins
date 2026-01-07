@@ -398,6 +398,93 @@ var plugin = function (args) {
         return cleanup(2);
     }
 
+    // Check for existing stereo track that matches the main audio language
+    // This prevents creating duplicate stereo tracks on re-runs
+    var mainLang = (targetAudio.tags && targetAudio.tags.language) || '';
+    if (!mainLang || mainLang === 'und' || mainLang === 'unk') {
+        // Try to find language from first track that has one
+        for (var langIdx = 0; langIdx < streams.length; langIdx++) {
+            var langStream = streams[langIdx];
+            if (langStream.codec_type === 'audio' && langStream.tags && langStream.tags.language) {
+                var testLang = langStream.tags.language.toLowerCase();
+                if (testLang && testLang !== 'und' && testLang !== 'unk') {
+                    mainLang = testLang;
+                    break;
+                }
+            }
+        }
+        // Fall back to English if still nothing
+        if (!mainLang || mainLang === 'und' || mainLang === 'unk') {
+            mainLang = 'eng';
+        }
+    }
+    mainLang = mainLang.toLowerCase();
+
+    // Get video duration for comparison
+    var videoDuration = 0;
+    if (args.inputFileObj.ffProbeData && args.inputFileObj.ffProbeData.format) {
+        videoDuration = parseFloat(args.inputFileObj.ffProbeData.format.duration) || 0;
+    }
+
+    // Check for existing stereo track
+    for (var stereoIdx = 0; stereoIdx < streams.length; stereoIdx++) {
+        var stereoStream = streams[stereoIdx];
+        if (stereoStream.codec_type !== 'audio' || stereoStream.channels !== 2) {
+            continue;
+        }
+
+        // Check language match
+        var stereoLang = (stereoStream.tags && stereoStream.tags.language) || '';
+        stereoLang = stereoLang.toLowerCase();
+
+        // Normalize language codes for comparison
+        var mainLangNorm = mainLang;
+        var stereoLangNorm = stereoLang;
+        // Handle variants
+        if (mainLangNorm === 'fra') mainLangNorm = 'fre';
+        if (mainLangNorm === 'deu') mainLangNorm = 'ger';
+        if (stereoLangNorm === 'fra') stereoLangNorm = 'fre';
+        if (stereoLangNorm === 'deu') stereoLangNorm = 'ger';
+
+        // Match if same language, or if stereo has no language (likely created by us previously)
+        var langMatch = (stereoLangNorm === mainLangNorm) ||
+                        (!stereoLang || stereoLang === 'und' || stereoLang === 'unk');
+
+        if (!langMatch) {
+            continue;
+        }
+
+        // Check duration if available (within 5% of video duration)
+        var streamDuration = 0;
+        if (stereoStream.duration) {
+            streamDuration = parseFloat(stereoStream.duration) || 0;
+        } else if (stereoStream.tags && stereoStream.tags.DURATION) {
+            // Parse HH:MM:SS.mmm format
+            var durParts = String(stereoStream.tags.DURATION).split(':');
+            if (durParts.length === 3) {
+                streamDuration = (parseFloat(durParts[0]) * 3600) +
+                                 (parseFloat(durParts[1]) * 60) +
+                                 parseFloat(durParts[2]);
+            }
+        }
+
+        // If we have both durations, check they're within 5%
+        var durationMatch = true;
+        if (videoDuration > 0 && streamDuration > 0) {
+            var durationRatio = streamDuration / videoDuration;
+            durationMatch = (durationRatio > 0.95 && durationRatio < 1.05);
+        }
+
+        if (durationMatch) {
+            var stereoTitle = (stereoStream.tags && stereoStream.tags.title) || 'untitled';
+            args.jobLog('Existing stereo track found: "' + stereoTitle + '" (' +
+                        (stereoLang || 'no lang') + '), skipping creation');
+            return cleanup(2);
+        }
+    }
+
+    args.jobLog('No existing matching stereo track found, proceeding with creation');
+
     // Build filter chain - CORRECT ORDER: pan -> normalize -> limit
     var panFilter = getPanFilter(channels, channelLayout);
     var audioFilter = panFilter;

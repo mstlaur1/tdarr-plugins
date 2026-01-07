@@ -155,18 +155,6 @@
       }
     },
     {
-      "name": "Already Stereo - Skip",
-      "sourceRepo": "Community",
-      "pluginName": "setNotToRemux",
-      "version": "1.0.0",
-      "fpEnabled": true,
-      "id": "skipStereo",
-      "position": {
-        "x": 700,
-        "y": 420
-      }
-    },
-    {
       "name": "Normalize Audio Titles",
       "sourceRepo": "Local",
       "pluginName": "normalizeAudioTitles",
@@ -240,7 +228,7 @@
     {
       "source": "chkMulti",
       "sourceHandle": "2",
-      "target": "skipStereo",
+      "target": "normTitles",
       "id": "e12"
     },
     {
@@ -254,12 +242,6 @@
       "sourceHandle": "1",
       "target": "normTitles",
       "id": "e14"
-    },
-    {
-      "source": "skipStereo",
-      "sourceHandle": "1",
-      "target": "normTitles",
-      "id": "e15"
     }
   ]
 }

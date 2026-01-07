@@ -1,0 +1,152 @@
+{
+  "_id": "AudioPrepOptimized",
+  "name": "Audio Prep Optimized (Single Pass)",
+  "description": "Optimized audio processing: DD+, stereo, reorder, and normalize in ONE ffmpeg pass",
+  "tags": "",
+  "flowPlugins": [
+    {
+      "name": "Input File",
+      "sourceRepo": "Community",
+      "pluginName": "inputFile",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "input1",
+      "position": {
+        "x": 450,
+        "y": 50
+      }
+    },
+    {
+      "name": "Main Audio Multichannel?",
+      "sourceRepo": "Local",
+      "pluginName": "checkFirstAudioChannels",
+      "version": "1.0.0",
+      "inputsDB": {
+        "condition": "multichannel"
+      },
+      "fpEnabled": true,
+      "id": "chkMulti",
+      "position": {
+        "x": 450,
+        "y": 150
+      }
+    },
+    {
+      "name": "Process Audio (All-in-One)",
+      "sourceRepo": "Local",
+      "pluginName": "processAudioComplete",
+      "version": "1.0.0",
+      "inputsDB": {
+        "createDDP": true,
+        "createStereo": true,
+        "stereoBitrate": "256",
+        "normalize": true,
+        "loudnormTarget": "-16",
+        "languages": "eng,fre",
+        "codecs": "eac3,dts,aac",
+        "defaultLanguage": "eng"
+      },
+      "fpEnabled": true,
+      "id": "processAudio",
+      "position": {
+        "x": 300,
+        "y": 300
+      }
+    },
+    {
+      "name": "Normalize Titles Only",
+      "sourceRepo": "Local",
+      "pluginName": "normalizeAudioTitles",
+      "version": "1.0.0",
+      "inputsDB": {
+        "defaultLanguage": "eng"
+      },
+      "fpEnabled": true,
+      "id": "normTitles",
+      "position": {
+        "x": 600,
+        "y": 300
+      }
+    },
+    {
+      "name": "Success",
+      "sourceRepo": "Community",
+      "pluginName": "comment",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "success",
+      "position": {
+        "x": 450,
+        "y": 450
+      }
+    },
+    {
+      "name": "Fail Flow",
+      "sourceRepo": "Community",
+      "pluginName": "failFlow",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "failFlow",
+      "position": {
+        "x": 150,
+        "y": 450
+      }
+    }
+  ],
+  "flowEdges": [
+    {
+      "source": "input1",
+      "sourceHandle": "1",
+      "target": "chkMulti",
+      "id": "e1"
+    },
+    {
+      "source": "chkMulti",
+      "sourceHandle": "1",
+      "target": "processAudio",
+      "id": "e2"
+    },
+    {
+      "source": "chkMulti",
+      "sourceHandle": "2",
+      "target": "normTitles",
+      "id": "e3"
+    },
+    {
+      "source": "processAudio",
+      "sourceHandle": "1",
+      "target": "success",
+      "id": "e4"
+    },
+    {
+      "source": "processAudio",
+      "sourceHandle": "2",
+      "target": "success",
+      "id": "e5"
+    },
+    {
+      "source": "processAudio",
+      "sourceHandle": "err1",
+      "target": "failFlow",
+      "id": "e6"
+    },
+    {
+      "source": "normTitles",
+      "sourceHandle": "1",
+      "target": "success",
+      "id": "e7"
+    },
+    {
+      "source": "normTitles",
+      "sourceHandle": "2",
+      "target": "success",
+      "id": "e8"
+    },
+    {
+      "source": "normTitles",
+      "sourceHandle": "err1",
+      "target": "failFlow",
+      "id": "e9"
+    }
+  ]
+}

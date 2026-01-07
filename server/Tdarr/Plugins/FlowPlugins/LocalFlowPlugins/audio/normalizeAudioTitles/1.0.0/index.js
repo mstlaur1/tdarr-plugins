@@ -396,6 +396,23 @@ var plugin = function (args) {
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
 
+    // Check if any titles actually need changing
+    var needsUpdate = false;
+    for (var checkIdx = 0; checkIdx < audioMetadata.length; checkIdx++) {
+        var checkMeta = audioMetadata[checkIdx];
+        if (checkMeta.title !== checkMeta.originalTitle) {
+            needsUpdate = true;
+            break;
+        }
+    }
+
+    if (!needsUpdate) {
+        args.jobLog('All audio titles are already correct, skipping remux');
+        return { outputFileObj: args.inputFileObj, outputNumber: 1, variables: args.variables };
+    }
+
+    args.jobLog('Title changes needed, proceeding with remux');
+
     // Use TDarr's work directory
     var workDir = args.workDir || '/temp';
 

@@ -54,6 +54,18 @@
       }
     },
     {
+      "name": "Replace Original",
+      "sourceRepo": "Community",
+      "pluginName": "replaceOriginalFile",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "replace1",
+      "position": {
+        "x": 300,
+        "y": 400
+      }
+    },
+    {
       "name": "Normalize Titles Only",
       "sourceRepo": "Local",
       "pluginName": "normalizeAudioTitles",
@@ -77,7 +89,7 @@
       "id": "success",
       "position": {
         "x": 450,
-        "y": 450
+        "y": 550
       }
     },
     {
@@ -89,7 +101,7 @@
       "id": "failFlow",
       "position": {
         "x": 150,
-        "y": 450
+        "y": 550
       }
     }
   ],
@@ -115,7 +127,7 @@
     {
       "source": "processAudio",
       "sourceHandle": "1",
-      "target": "success",
+      "target": "replace1",
       "id": "e4"
     },
     {
@@ -131,22 +143,34 @@
       "id": "e6"
     },
     {
-      "source": "normTitles",
+      "source": "replace1",
       "sourceHandle": "1",
       "target": "success",
       "id": "e7"
     },
     {
+      "source": "replace1",
+      "sourceHandle": "err1",
+      "target": "failFlow",
+      "id": "e8"
+    },
+    {
+      "source": "normTitles",
+      "sourceHandle": "1",
+      "target": "success",
+      "id": "e9"
+    },
+    {
       "source": "normTitles",
       "sourceHandle": "2",
       "target": "success",
-      "id": "e8"
+      "id": "e10"
     },
     {
       "source": "normTitles",
       "sourceHandle": "err1",
       "target": "failFlow",
-      "id": "e9"
+      "id": "e11"
     }
   ]
 }

@@ -12,6 +12,8 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.plugin = exports.details = void 0;
+var cliUtils_1 = require("../../../../FlowHelpers/1.0.0/cliUtils");
+var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
 
 var details = function () { return ({
     name: 'Process Audio Complete',
@@ -188,12 +190,8 @@ function normalizeLangCode(code) {
     return c;
 }
 
-var plugin = function (args) {
+var plugin = async function (args) {
     var fs = require('fs');
-    var path = require('path');
-    var crypto = require('crypto');
-    var spawn = require('child_process').spawnSync;
-
     var lib = require('../../../../../methods/lib')();
 
     try {
@@ -224,7 +222,6 @@ var plugin = function (args) {
     }
 
     var streams = args.inputFileObj.ffProbeData.streams;
-    var workDir = args.workDir || '/temp';
 
     // Analyze audio streams
     var audioStreams = [];
@@ -431,10 +428,7 @@ var plugin = function (args) {
     }
 
     // Build ffmpeg command
-    var ffmpegCli = args.ffmpegPath || (args.deps && args.deps.ffmpegPath) || 'tdarr-ffmpeg';
-
-    var uniqueId = crypto.randomBytes(16).toString('hex');
-    var tempFile = path.join(workDir, 'process_' + uniqueId + '.mkv');
+    var outputFilePath = (0, fileUtils_1.getPluginWorkDir)(args) + '/' + (0, fileUtils_1.getFileName)(inputFile) + '.mkv';
 
     var filterComplex = '';
     var mapArgs = [];
@@ -497,72 +491,62 @@ var plugin = function (args) {
         spawnArgs.push('-filter_complex', filterComplex);
     }
     spawnArgs = spawnArgs.concat(mapArgs).concat(codecArgs).concat(metadataArgs);
-    spawnArgs.push(tempFile);
+    spawnArgs.push(outputFilePath);
 
     args.jobLog('Executing ffmpeg with ' + spawnArgs.length + ' args');
     args.jobLog('Filter: ' + (filterComplex || 'none'));
 
-    var startTime = Date.now();
-    var result = spawn(ffmpegCli, spawnArgs, {
-        encoding: 'utf8',
-        maxBuffer: 50 * 1024 * 1024,
-        timeout: 60 * 60 * 1000, // 1 hour
+    // Update worker with CLI info for progress display
+    args.updateWorker({
+        CLIType: args.ffmpegPath,
+        preset: spawnArgs.join(' '),
     });
 
-    var elapsed = Math.round((Date.now() - startTime) / 1000);
-    args.jobLog('FFmpeg completed in ' + elapsed + ' seconds');
+    // Run ffmpeg with progress reporting
+    var cli = new cliUtils_1.CLI({
+        cli: args.ffmpegPath,
+        spawnArgs: spawnArgs,
+        spawnOpts: {},
+        jobLog: args.jobLog,
+        outputFilePath: outputFilePath,
+        inputFileObj: args.inputFileObj,
+        logFullCliOutput: args.logFullCliOutput,
+        updateWorker: args.updateWorker,
+        args: args,
+    });
 
-    if (result.status !== 0) {
-        args.jobLog('FFmpeg error (exit ' + result.status + '):');
-        args.jobLog((result.stderr || '').slice(-3000));
-        try { fs.unlinkSync(tempFile); } catch (e) { }
+    var cliResult = await cli.runCli();
+
+    if (cliResult.cliExitCode !== 0) {
+        args.jobLog('FFmpeg failed with exit code: ' + cliResult.cliExitCode);
+        try { fs.unlinkSync(outputFilePath); } catch (e) { }
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
+
+    args.jobLog('FFmpeg completed successfully');
 
     // Verify output
     var inputStats, outputStats;
     try {
         inputStats = fs.statSync(inputFile);
-        outputStats = fs.statSync(tempFile);
+        outputStats = fs.statSync(outputFilePath);
     } catch (e) {
         args.jobLog('ERROR: Could not stat files: ' + e.message);
-        try { fs.unlinkSync(tempFile); } catch (e2) { }
+        try { fs.unlinkSync(outputFilePath); } catch (e2) { }
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
 
     if (outputStats.size < inputStats.size * 0.5) {
         args.jobLog('ERROR: Output too small (' + Math.round(outputStats.size/1024/1024) + 'MB vs ' + Math.round(inputStats.size/1024/1024) + 'MB)');
-        try { fs.unlinkSync(tempFile); } catch (e) { }
+        try { fs.unlinkSync(outputFilePath); } catch (e) { }
         return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
     }
 
-    // Replace original
-    var backupFile = inputFile + '.backup_' + uniqueId;
-    try {
-        fs.renameSync(inputFile, backupFile);
-        try {
-            try {
-                fs.renameSync(tempFile, inputFile);
-            } catch (e) {
-                fs.copyFileSync(tempFile, inputFile);
-                fs.unlinkSync(tempFile);
-            }
-            fs.unlinkSync(backupFile);
-            args.jobLog('SUCCESS: File processed and replaced');
-        } catch (moveErr) {
-            args.jobLog('ERROR moving file: ' + moveErr.message);
-            try { fs.renameSync(backupFile, inputFile); } catch (e) { }
-            try { fs.unlinkSync(tempFile); } catch (e) { }
-            return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
-        }
-    } catch (backupErr) {
-        args.jobLog('ERROR creating backup: ' + backupErr.message);
-        try { fs.unlinkSync(tempFile); } catch (e) { }
-        return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
-    }
+    args.jobLog('SUCCESS: File processed (' + Math.round(outputStats.size/1024/1024) + 'MB)');
 
+    // Return the new file - let replaceOriginalFile plugin handle the replacement
     return {
-        outputFileObj: Object.assign({}, args.inputFileObj, { _id: inputFile }),
+        outputFileObj: { _id: outputFilePath },
         outputNumber: 1,
         variables: args.variables,
     };

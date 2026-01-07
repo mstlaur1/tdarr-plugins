@@ -122,53 +122,80 @@ function validateBitrate(bitrate) {
 }
 
 // Get pan filter for specific channel layout
+// Returns {filter, branch} for logging/debugging
 function getPanFilter(channels, channelLayout) {
     var layout = (channelLayout || '').toLowerCase();
+    // Only set hasBack if layout EXPLICITLY contains "back"
+    var hasBack = layout.indexOf('back') !== -1;
+    var hasSide = layout.indexOf('side') !== -1;
 
-    // 5.1 variants (6 channels)
-    if (channels === 6 || layout.indexOf('5.1') !== -1) {
-        return 'pan=stereo|' +
-            'FL=0.70*FL+0.70*FC+0.30*SL+0.30*BL+0.25*LFE|' +
-            'FR=0.70*FR+0.70*FC+0.30*SR+0.30*BR+0.25*LFE';
-    }
-
-    // 7.1 variants (8 channels)
+    // 7.1 (8 channels) - has both side and back
     if (channels === 8 || layout.indexOf('7.1') !== -1) {
-        return 'pan=stereo|' +
-            'FL=0.70*FL+0.70*FC+0.25*SL+0.20*BL+0.20*LFE|' +
-            'FR=0.70*FR+0.70*FC+0.25*SR+0.20*BR+0.20*LFE';
+        return {
+            filter: 'pan=stereo|FL=0.70*FL+0.70*FC+0.25*SL+0.20*BL+0.20*LFE|FR=0.70*FR+0.70*FC+0.25*SR+0.20*BR+0.20*LFE',
+            branch: '7.1'
+        };
     }
 
-    // 6.1 (7 channels) - has back center (BC or Cb depending on ffmpeg)
+    // 6.1 (7 channels) - has back center
     if (channels === 7 || layout.indexOf('6.1') !== -1) {
-        return 'pan=stereo|' +
-            'FL=0.70*FL+0.70*FC+0.30*SL+0.20*BC+0.20*LFE|' +
-            'FR=0.70*FR+0.70*FC+0.30*SR+0.20*BC+0.20*LFE';
+        return {
+            filter: 'pan=stereo|FL=0.70*FL+0.70*FC+0.30*SL+0.15*BC+0.20*LFE|FR=0.70*FR+0.70*FC+0.30*SR+0.15*BC+0.20*LFE',
+            branch: '6.1'
+        };
     }
 
-    // Quad (4 channels) - no center, no LFE
+    // 5.1 with EXPLICIT back channels only
+    if (channels === 6 && hasBack) {
+        return {
+            filter: 'pan=stereo|FL=0.70*FL+0.70*FC+0.35*BL+0.20*LFE|FR=0.70*FR+0.70*FC+0.35*BR+0.20*LFE',
+            branch: '5.1(back)'
+        };
+    }
+
+    // 5.1(side) or unknown 6-channel - default to side (safer, more common)
+    if (channels === 6) {
+        return {
+            filter: 'pan=stereo|FL=0.70*FL+0.70*FC+0.35*SL+0.20*LFE|FR=0.70*FR+0.70*FC+0.35*SR+0.20*LFE',
+            branch: hasSide ? '5.1(side)' : '5.1(default-side)'
+        };
+    }
+
+    // Quad (4 channels) - check for back, default to side
     if (channels === 4 || layout.indexOf('quad') !== -1 || layout.indexOf('4.0') !== -1) {
-        return 'pan=stereo|' +
-            'FL=0.80*FL+0.40*SL+0.40*BL|' +
-            'FR=0.80*FR+0.40*SR+0.40*BR';
+        if (hasBack) {
+            return {
+                filter: 'pan=stereo|FL=0.80*FL+0.40*BL|FR=0.80*FR+0.40*BR',
+                branch: 'quad(back)'
+            };
+        }
+        return {
+            filter: 'pan=stereo|FL=0.80*FL+0.40*SL|FR=0.80*FR+0.40*SR',
+            branch: 'quad(side)'
+        };
     }
 
     // 3.0 (3 channels) - L, R, C
     if (channels === 3) {
-        return 'pan=stereo|' +
-            'FL=0.70*FL+0.70*FC|' +
-            'FR=0.70*FR+0.70*FC';
+        return {
+            filter: 'pan=stereo|FL=0.70*FL+0.70*FC|FR=0.70*FR+0.70*FC',
+            branch: '3.0'
+        };
     }
 
     // For complex layouts (Atmos, etc), let ffmpeg's internal downmixer handle it
     if (channels > 8) {
-        return 'aformat=channel_layouts=stereo';
+        return {
+            filter: 'aformat=channel_layouts=stereo',
+            branch: 'atmos-auto'
+        };
     }
 
-    // Generic fallback
-    return 'pan=stereo|' +
-        'FL=0.70*FL+0.70*FC+0.30*SL+0.30*BL+0.25*LFE|' +
-        'FR=0.70*FR+0.70*FC+0.30*SR+0.30*BR+0.25*LFE';
+    // Generic fallback - use side channels as safer default
+    return {
+        filter: 'pan=stereo|FL=0.70*FL+0.70*FC+0.35*SL+0.20*LFE|FR=0.70*FR+0.70*FC+0.35*SR+0.20*LFE',
+        branch: 'fallback-side'
+    };
 }
 
 // Clean up orphaned files from previous runs
@@ -486,8 +513,9 @@ var plugin = function (args) {
     args.jobLog('No existing matching stereo track found, proceeding with creation');
 
     // Build filter chain - CORRECT ORDER: pan -> normalize -> limit
-    var panFilter = getPanFilter(channels, channelLayout);
-    var audioFilter = panFilter;
+    var pan = getPanFilter(channels, channelLayout);
+    args.jobLog('Downmix branch: ' + pan.branch + ' (layout=' + (channelLayout || 'unknown') + ')');
+    var audioFilter = pan.filter;
 
     if (normalize) {
         audioFilter += ',loudnorm=I=' + loudnormTarget + ':TP=-1.5:LRA=11';

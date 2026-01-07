@@ -165,15 +165,22 @@ function getChannelDisplay(channels, profile) {
     return channels + 'ch';
 }
 
-// Get pan filter for stereo downmix
+// Get pan filter for stereo downmix (layout-aware)
 function getPanFilter(channels) {
     if (channels === 8) {
+        // 7.1: FL FR FC LFE BL BR SL SR
         return 'pan=stereo|FL=0.70*FL+0.70*FC+0.25*SL+0.20*BL+0.20*LFE|FR=0.70*FR+0.70*FC+0.25*SR+0.20*BR+0.20*LFE';
     }
-    if (channels >= 6) {
-        return 'pan=stereo|FL=0.70*FL+0.70*FC+0.30*SL+0.30*BL+0.25*LFE|FR=0.70*FR+0.70*FC+0.30*SR+0.30*BR+0.25*LFE';
+    if (channels === 7) {
+        // 6.1: FL FR FC LFE BC SL SR (back center)
+        return 'pan=stereo|FL=0.70*FL+0.70*FC+0.30*SL+0.15*BC+0.20*LFE|FR=0.70*FR+0.70*FC+0.30*SR+0.15*BC+0.20*LFE';
+    }
+    if (channels === 6) {
+        // 5.1: FL FR FC LFE SL SR (no back channels)
+        return 'pan=stereo|FL=0.70*FL+0.70*FC+0.35*SL+0.20*LFE|FR=0.70*FR+0.70*FC+0.35*SR+0.20*LFE';
     }
     if (channels > 2) {
+        // Quad or other: FL FR FC (maybe more)
         return 'pan=stereo|FL=0.70*FL+0.70*FC|FR=0.70*FR+0.70*FC';
     }
     return 'aformat=channel_layouts=stereo';
@@ -206,6 +213,13 @@ function parseAudioIndexFromSource(source) {
     return m ? parseInt(m[1], 10) : -1;
 }
 
+// Normalize codec name for sorting (handles ffprobe variations)
+function normalizeCodecForSort(codec) {
+    var c = (codec || '').toLowerCase();
+    if (c === 'dca') return 'dts';  // ffprobe sometimes reports DTS as dca
+    return c;
+}
+
 var plugin = async function (args) {
     var fs = require('fs');
     var lib = require('../../../../../methods/lib')();
@@ -222,9 +236,14 @@ var plugin = async function (args) {
     var stereoBitrate = parseInt(args.inputs.stereoBitrate, 10) || 256;
     var normalize = args.inputs.normalize === true || args.inputs.normalize === 'true';
     var loudnormTarget = parseInt(args.inputs.loudnormTarget, 10) || -16;
-    var languagePriority = (args.inputs.languages || 'eng').split(',').map(function(s) { return s.trim().toLowerCase(); });
-    var codecPriority = (args.inputs.codecs || 'eac3,dts,aac').split(',').map(function(s) { return s.trim().toLowerCase(); });
-    var defaultLanguage = args.inputs.defaultLanguage || 'eng';
+    // Normalize priority lists so "en,fr" works the same as "eng,fre"
+    var languagePriority = (args.inputs.languages || 'eng').split(',').map(function(s) {
+        return normalizeLangCode(s.trim());
+    });
+    var codecPriority = (args.inputs.codecs || 'eac3,dts,aac').split(',').map(function(s) {
+        return normalizeCodecForSort(s.trim());
+    });
+    var defaultLanguage = normalizeLangCode(args.inputs.defaultLanguage || 'eng');
 
     var inputFile = args.inputFileObj._id || args.inputFileObj.file;
     if (!inputFile) {
@@ -372,8 +391,8 @@ var plugin = async function (args) {
         if (bLangIdx === -1) bLangIdx = 999;
         if (aLangIdx !== bLangIdx) return aLangIdx - bLangIdx;
 
-        var aCodecIdx = codecPriority.indexOf(a.originalCodec ? a.originalCodec.toLowerCase() : '');
-        var bCodecIdx = codecPriority.indexOf(b.originalCodec ? b.originalCodec.toLowerCase() : '');
+        var aCodecIdx = codecPriority.indexOf(normalizeCodecForSort(a.originalCodec));
+        var bCodecIdx = codecPriority.indexOf(normalizeCodecForSort(b.originalCodec));
         if (aCodecIdx === -1) aCodecIdx = 999;
         if (bCodecIdx === -1) bCodecIdx = 999;
         return aCodecIdx - bCodecIdx;
@@ -496,7 +515,7 @@ var plugin = async function (args) {
 
         // Metadata
         metadataArgs.push('-metadata:s:a:' + p, 'title=' + audioTrack.title);
-        metadataArgs.push('-metadata:s:a:' + p, 'language=' + (audioTrack.language || defaultLanguage));
+        metadataArgs.push('-metadata:s:a:' + p, 'language=' + normalizeLangCode(audioTrack.language || defaultLanguage));
 
         // Disposition - first track is default
         if (p === 0) {
@@ -506,8 +525,9 @@ var plugin = async function (args) {
         }
     }
 
-    // Map subtitles and attachments
+    // Map subtitles, attachments, and preserve metadata/chapters
     mapArgs.push('-map', '0:s?', '-map', '0:t?');
+    mapArgs.push('-map_metadata', '0', '-map_chapters', '0');
     codecArgs.push('-c:v', 'copy', '-c:s', 'copy', '-c:t', 'copy');
 
     // Build full command

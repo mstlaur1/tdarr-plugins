@@ -82,7 +82,7 @@
       "version": "1.0.0",
       "inputsDB": {
         "inputArguments": "",
-        "outputArguments": "-map -0 -map 0:v -map 0:a:0 -map 0:a:0 -map 0:s? -map 0:t? -c:v copy -c:a:0 copy -c:a:1 eac3 -b:a:1 640k -c:s copy -c:t copy -disposition:a:0 0 -disposition:a:1 default -metadata:s:a:0 title=\"Original\" -metadata:s:a:1 title=\"DD+5.1\""
+        "outputArguments": "-map -0 -map 0:v -map 0:a:0 -map 0:a -map 0:s? -map 0:t? -c:v copy -c:a copy -c:a:0 eac3 -b:a:0 640k -c:s copy -c:t copy -disposition:a 0 -disposition:a:0 default"
       },
       "fpEnabled": true,
       "id": "ffArgsDDP",
